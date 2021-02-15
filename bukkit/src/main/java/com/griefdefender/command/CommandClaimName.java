@@ -52,8 +52,8 @@ import org.bukkit.entity.Player;
 public class CommandClaimName extends BaseCommand {
 
     @CommandAlias("claimname")
-    @Syntax("<name>")
-    @Description("Sets the name of your claim.")
+    @Syntax("<name>|clear")
+    @Description("%claim-name")
     @Subcommand("claim name")
     public void execute(Player player, String name) {
         final GDPlayerData playerData = GriefDefenderPlugin.getInstance().dataStore.getOrCreatePlayerData(player.getWorld(), player.getUniqueId());
@@ -74,8 +74,8 @@ public class CommandClaimName extends BaseCommand {
             }
         }
 
-        final Component text = LegacyComponentSerializer.legacy().deserialize(name, '&');
-        if (text == TextComponent.empty()) {
+        final TextComponent text = LegacyComponentSerializer.legacy().deserialize(name, '&');
+        if (text == TextComponent.empty() || text.content().equals("clear")) {
             claim.getInternalClaimData().setName(null);
         } else {
             claim.getInternalClaimData().setName(text);

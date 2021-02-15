@@ -31,11 +31,15 @@ import java.util.Set;
 import java.util.UUID;
 
 import com.google.common.reflect.TypeToken;
+import com.griefdefender.GriefDefenderPlugin;
+import com.griefdefender.api.Tristate;
 import com.griefdefender.api.permission.Context;
 import com.griefdefender.api.permission.ContextKeys;
 import com.griefdefender.api.permission.flag.Flag;
 import com.griefdefender.api.permission.flag.FlagData;
 import com.griefdefender.api.permission.flag.FlagDefinition;
+import com.griefdefender.cache.PermissionHolderCache;
+import com.griefdefender.permission.GDPermissionHolder;
 import com.griefdefender.permission.flag.GDFlagData;
 import com.griefdefender.permission.flag.GDFlagDefinition;
 import com.griefdefender.registry.FlagRegistryModule;
@@ -53,13 +57,22 @@ public class FlagDefinitionSerializer implements TypeSerializer<FlagDefinition> 
     public FlagDefinition deserialize(TypeToken<?> type, ConfigurationNode node) throws ObjectMappingException {
         final String flagDisplayName = node.getKey().toString();
         final boolean enabled = node.getNode("enabled").getBoolean();
+        final boolean adminGroup = node.getParent().getParent().getNode("admin-group").getBoolean();
+        final String groupName = (String) node.getParent().getParent().getKey();
         final String descr = node.getNode("description").getString();
         Component description = TextComponent.empty();
         if (descr != null) {
             description = LegacyComponentSerializer.legacy().deserialize(descr, '&');
         }
+        if (node.getNode("default-value").isVirtual()) {
+            throw new ObjectMappingException("No 'default-value' found for flag definition '" + flagDisplayName + "' in group '" + groupName + "'. A default value is required and needs to be set to either 'true' or 'false'.");
+        }
+        final boolean defaultValue = node.getNode("default-value").getBoolean();
 
         List<String> contextList = node.getNode("contexts").getList(TypeToken.of(String.class));
+        if (adminGroup && (contextList == null || contextList.isEmpty())) {
+            throw new ObjectMappingException("No contexts found for admin flag definition '" + flagDisplayName + "' in group '" + groupName + "'. You must specify one of the following contexts :'gd_claim_default=<type>' , 'gd_claim_override=<type>', or 'gd_claim=claim'.");
+        }
         List<String> permissionList = node.getNode("permissions").getList(TypeToken.of(String.class));
         if (permissionList == null) {
             throw new ObjectMappingException("No permissions found for flag definition '" + flagDisplayName + "'. You must specify at least 1 or more permissions.");
@@ -87,6 +100,9 @@ public class FlagDefinitionSerializer implements TypeSerializer<FlagDefinition> 
                     switch (key) {
                         case ContextKeys.SOURCE:
                         case ContextKeys.TARGET:
+                            if (value.equalsIgnoreCase("any")) {
+                                break;
+                            }
                             if (!value.contains(":") && !value.contains("#")) {
                                 value = "minecraft:" + value;
                             }
@@ -94,11 +110,15 @@ public class FlagDefinitionSerializer implements TypeSerializer<FlagDefinition> 
                             break;
                         case "used_item":
                         case "item_name":
-                        case ContextKeys.CLAIM_DEFAULT:
-                        case ContextKeys.CLAIM_OVERRIDE:
                         case ContextKeys.STATE:
                             flagContexts.add(new Context(key, value));
                             break;
+                        case "server":
+                        case "world":
+                        case ContextKeys.CLAIM_DEFAULT:
+                        case ContextKeys.CLAIM_OVERRIDE:
+                            // gd_claim contexts should always be set at the definition level
+                            throw new ObjectMappingException("Invalid context '" + key + "' with value '" + value + "'.\nContext '" + key + "' can only be used for the definition.");
                         default:
                             throw new ObjectMappingException("Invalid context '" + key + "' with value '" + value + "'.");
                     }
@@ -108,11 +128,12 @@ public class FlagDefinitionSerializer implements TypeSerializer<FlagDefinition> 
                 throw new ObjectMappingException("No linked flag specified. You need to specify 'flag=<flagname>'.");
             }
 
-            flagDataList.add(new GDFlagData(linkedFlag, flagContexts));
+            final GDFlagData flagData = new GDFlagData(linkedFlag, flagContexts);
+            flagDataList.add(flagData);
         }
-        final GDFlagDefinition flagDefinition = new GDFlagDefinition(flagDataList, flagDisplayName, description);
-        flagDefinition.setIsEnabled(enabled);
+
         Set<Context> contexts = new HashSet<>();
+        GDPermissionHolder subject = GriefDefenderPlugin.GD_DEFINITION_HOLDER;
         if (contextList != null) {
             for (String context : contextList) {
                 final String parts[] = context.split("=");
@@ -123,13 +144,13 @@ public class FlagDefinitionSerializer implements TypeSerializer<FlagDefinition> 
                 final String value = parts[1];
                 if (key.equalsIgnoreCase("default") || key.equalsIgnoreCase("gd_claim_default")) {
                     if (!value.equalsIgnoreCase("global") && !value.equalsIgnoreCase("basic") && !value.equalsIgnoreCase("admin")
-                            && !value.equalsIgnoreCase("subdivision") && !value.equalsIgnoreCase("town")) {
+                            && !value.equalsIgnoreCase("subdivision") && !value.equalsIgnoreCase("town") && !value.equalsIgnoreCase("user")) {
                         throw new ObjectMappingException("Invalid context '" + key + "' with value '" + value + "'.");
                     }
                     contexts.add(new Context("gd_claim_default", value));
                 } else if (key.equalsIgnoreCase("override") || key.equalsIgnoreCase("gd_claim_override")) {
                     if (!value.equalsIgnoreCase("global") && !value.equalsIgnoreCase("basic") && !value.equalsIgnoreCase("admin")
-                            && !value.equalsIgnoreCase("subdivision") && !value.equalsIgnoreCase("town")) {
+                            && !value.equalsIgnoreCase("subdivision") && !value.equalsIgnoreCase("town") && !value.equalsIgnoreCase("claim")  && !value.equalsIgnoreCase("wilderness")) {
                         // try UUID
                         if (value.length() == 36) {
                             try {
@@ -142,29 +163,31 @@ public class FlagDefinitionSerializer implements TypeSerializer<FlagDefinition> 
                         }
                     }
                     contexts.add(new Context("gd_claim_override", value));
+                } else if (key.equalsIgnoreCase("group")) {
+                    if (value != null) {
+                        if (PermissionUtil.getInstance().hasGroupSubject(value)) {
+                            subject = PermissionHolderCache.getInstance().getOrCreateGroup(value);
+                            if (subject == null) {
+                                subject = GriefDefenderPlugin.GD_DEFINITION_HOLDER;
+                            }
+                        }
+                    }
                 } else {
                     contexts.add(new Context(key, value));
                 }
             }
-            boolean hasServerContext = false;
-            for (Context context : contexts) {
-                if (context.getKey().equalsIgnoreCase("server")) {
-                    hasServerContext = true;
-                    break;
-                }
-            }
-            if (!hasServerContext) {
-                final String serverName = PermissionUtil.getInstance().getServerName() == null ? "global" : PermissionUtil.getInstance().getServerName();
-                contexts.add(new Context("server", serverName));
-            }
-            flagDefinition.setContexts(contexts);
         }
+
+        final GDFlagDefinition flagDefinition = new GDFlagDefinition(flagDataList, flagDisplayName, description, groupName, subject, adminGroup, contexts);
+        flagDefinition.setIsEnabled(enabled);
+        flagDefinition.setDefaultValue(Tristate.fromBoolean(defaultValue));
         return flagDefinition;
     }
 
     @Override
     public void serialize(TypeToken<?> type, FlagDefinition obj, ConfigurationNode node) throws ObjectMappingException {
         node.getNode("enabled").setValue(obj.isEnabled());
+        node.getNode("default-value").setValue(obj.getDefaultValue().asBoolean());
         String description = "";
         if (obj.getDescription() != TextComponent.empty()) {
             description = LegacyComponentSerializer.legacy().serialize((Component) obj.getDescription(), '&');

@@ -79,16 +79,15 @@ public class CommandClaimAbandon extends BaseCommand {
     protected boolean abandonTopClaim = false;
 
     @CommandAlias("abandon|abandonclaim")
-    @Description("Abandons a claim")
+    @Description("%abandon-claim")
     @Subcommand("abandon claim")
     public void execute(Player player) {
         final GDClaim claim = GriefDefenderPlugin.getInstance().dataStore.getClaimAt(player.getLocation());
         final UUID ownerId = claim.getOwnerUniqueId();
-        final GDPermissionUser user = PermissionHolderCache.getInstance().getOrCreateUser(player);
+        final GDPermissionUser user = PermissionHolderCache.getInstance().getOrCreateUser(player.getUniqueId());
         final GDPlayerData playerData = user.getInternalPlayerData();
 
         final boolean isAdmin = playerData.canIgnoreClaim(claim);
-        final boolean isTown = claim.isTown();
         if (claim.isWilderness()) {
             GriefDefenderPlugin.sendMessage(player, MessageCache.getInstance().ABANDON_CLAIM_MISSING);
             return;
@@ -107,7 +106,6 @@ public class CommandClaimAbandon extends BaseCommand {
                     Set<Claim> invalidClaims = new HashSet<>();
                     for (Claim child : claim.getChildren(true)) {
                         if (child.getOwnerUniqueId() == null || !child.getOwnerUniqueId().equals(ownerId)) {
-                            //return CommandResult.empty();
                             invalidClaims.add(child);
                         }
                     }
@@ -120,17 +118,35 @@ public class CommandClaimAbandon extends BaseCommand {
                 }
             }
         }
-
-        final int abandonDelay = GDPermissionManager.getInstance().getInternalOptionValue(TypeToken.of(Integer.class), user, Options.ABANDON_DELAY, claim);
-        if (abandonDelay > 0) {
-            final Instant localNow = Instant.now();
-            final Instant dateCreated = claim.getInternalClaimData().getDateCreated();
-            final Instant delayExpires = dateCreated.plus(Duration.ofDays(abandonDelay));
-            final boolean delayActive = !delayExpires.isBefore(localNow);
-            if (delayActive) {
-                TextAdapter.sendComponent(player, MessageStorage.MESSAGE_DATA.getMessage(MessageStorage.ABANDON_CLAIM_DELAY_WARNING, 
-                        ImmutableMap.of("date", Date.from(delayExpires))));
+        if (!isAdmin && (claim.isTown() && claim.children.size() > 0)) {
+            Set<Claim> childClaims = new HashSet<>();
+            for (Claim child : claim.getChildren(true)) {
+                if (!child.isBasicClaim()) {
+                    continue;
+                }
+                if (child.getOwnerUniqueId().equals(user.getUniqueId())) {
+                    childClaims.add(child);
+                }
+            }
+            if (!childClaims.isEmpty()) {
+                GriefDefenderPlugin.sendMessage(player, TextComponent.of("Abandon town failed! You must abandon all basic children claims owned by you first.", TextColor.RED));
+                CommandHelper.showClaims(player, childClaims, 0, true);
                 return;
+            }
+        }
+
+        if (!isAdmin) {
+            final int abandonDelay = GDPermissionManager.getInstance().getInternalOptionValue(TypeToken.of(Integer.class), user, Options.ABANDON_DELAY, claim);
+            if (abandonDelay > 0) {
+                final Instant localNow = Instant.now();
+                final Instant dateCreated = claim.getInternalClaimData().getDateCreated();
+                final Instant delayExpires = dateCreated.plus(Duration.ofDays(abandonDelay));
+                final boolean delayActive = !delayExpires.isBefore(localNow);
+                if (delayActive) {
+                    TextAdapter.sendComponent(player, MessageStorage.MESSAGE_DATA.getMessage(MessageStorage.ABANDON_CLAIM_DELAY_WARNING, 
+                            ImmutableMap.of("date", Date.from(delayExpires))));
+                    return;
+                }
             }
         }
         final boolean autoSchematicRestore = GriefDefenderPlugin.getActiveConfig(player.getWorld().getProperties()).getConfig().claim.claimAutoSchematicRestore;
@@ -138,57 +154,77 @@ public class CommandClaimAbandon extends BaseCommand {
                 .append(autoSchematicRestore ? MessageCache.getInstance().SCHEMATIC_ABANDON_RESTORE_WARNING : MessageCache.getInstance().ABANDON_WARNING)
                     .append(TextComponent.builder()
                     .append("\n[")
-                    .append("Confirm", TextColor.GREEN)
+                    .append(MessageCache.getInstance().LABEL_CONFIRM.color(TextColor.GREEN))
                     .append("]\n")
-                    .clickEvent(ClickEvent.runCommand(GDCallbackHolder.getInstance().createCallbackRunCommand(createConfirmationConsumer(player, playerData, claim, this.abandonTopClaim))))
+                    .clickEvent(ClickEvent.runCommand(GDCallbackHolder.getInstance().createCallbackRunCommand(player, createConfirmationConsumer(player, user, claim, this.abandonTopClaim), true)))
                     .hoverEvent(HoverEvent.showText(MessageCache.getInstance().UI_CLICK_CONFIRM)).build())
                 .build();
         TextAdapter.sendComponent(player, confirmationText);
     }
 
-    private static Consumer<CommandSource> createConfirmationConsumer(Player player, GDPlayerData playerData, GDClaim claim, boolean abandonTopClaim) {
+    private static Consumer<CommandSource> createConfirmationConsumer(Player source, GDPermissionUser user, GDClaim claim, boolean abandonTopClaim) {
         return confirm -> {
 
-            GDCauseStackManager.getInstance().pushCause(player);
+            GDCauseStackManager.getInstance().pushCause(source);
             GDRemoveClaimEvent.Abandon event = new GDRemoveClaimEvent.Abandon(claim);
             GriefDefender.getEventManager().post(event);
             GDCauseStackManager.getInstance().popCause();
             if (event.cancelled()) {
-                TextAdapter.sendComponent(player, event.getMessage().orElse(MessageCache.getInstance().PLUGIN_EVENT_CANCEL));
+                TextAdapter.sendComponent(source, event.getMessage().orElse(MessageCache.getInstance().PLUGIN_EVENT_CANCEL));
                 return;
             }
 
             if (!claim.isSubdivision() && !claim.isAdminClaim()) {
                 if (GriefDefenderPlugin.getGlobalConfig().getConfig().economy.economyMode) {
-                    final Account playerAccount = GriefDefenderPlugin.getInstance().economyService.get().getOrCreateAccount(playerData.playerID).orElse(null);
+                    final Account playerAccount = GriefDefenderPlugin.getInstance().economyService.get().getOrCreateAccount(user.getUniqueId()).orElse(null);
                     if (playerAccount == null) {
                         return;
                     }
                 }
             }
 
-            GDClaimManager claimManager = GriefDefenderPlugin.getInstance().dataStore.getClaimWorldManager(player.getWorld().getUniqueId());
+            final GDPlayerData playerData = user.getInternalPlayerData();
+            GDClaimManager claimManager = GriefDefenderPlugin.getInstance().dataStore.getClaimWorldManager(source.getWorld().getUniqueId());
             playerData.useRestoreSchematic = event.isRestoring();
             final ClaimResult claimResult = claimManager.deleteClaimInternal(claim, abandonTopClaim);
             playerData.useRestoreSchematic = false;
             if (!claimResult.successful()) {
-                TextAdapter.sendComponent(player, event.getMessage().orElse(GriefDefenderPlugin.getInstance().messageData.getMessage(MessageStorage.ABANDON_FAILED,
+                TextAdapter.sendComponent(source, event.getMessage().orElse(GriefDefenderPlugin.getInstance().messageData.getMessage(MessageStorage.ABANDON_FAILED,
                         ImmutableMap.of("result", claimResult.getMessage().orElse(TextComponent.of(claimResult.getResultType().toString()))))));
                 return;
             }
 
             playerData.onClaimDelete();
-            playerData.revertActiveVisual(player);
+            playerData.revertClaimVisual(claim);
 
             if (claim.isTown()) {
                 playerData.inTown = false;
                 playerData.townChat = false;
             }
 
-            if (!claim.isSubdivision() && !claim.isAdminClaim()) {
-                final double abandonReturnRatio = GDPermissionManager.getInstance().getInternalOptionValue(TypeToken.of(Double.class), player, Options.ABANDON_RETURN_RATIO, claim);
+            if (claim.isSubdivision()) {
+                int remainingBlocks = playerData.getRemainingClaimBlocks();
+                final Component message = GriefDefenderPlugin.getInstance().messageData.getMessage(MessageStorage.ABANDON_SUCCESS, ImmutableMap.of(
+                        "amount", remainingBlocks));
+                GriefDefenderPlugin.sendMessage(source, message);
+                return;
+            }
+
+            if (!claim.isAdminClaim()) {
+                // check parent
+                final Claim parentClaim = claim.getParent().orElse(null);
+                if (parentClaim != null && parentClaim.isTown()) {
+                    if (parentClaim.isUserTrusted(user.getUniqueId(), TrustTypes.MANAGER)) {
+                        int remainingBlocks = playerData.getRemainingClaimBlocks();
+                        final Component message = GriefDefenderPlugin.getInstance().messageData.getMessage(MessageStorage.ABANDON_SUCCESS, ImmutableMap.of(
+                                "amount", remainingBlocks));
+                        GriefDefenderPlugin.sendMessage(source, message);
+                        return;
+                    }
+                }
+                final double abandonReturnRatio = GDPermissionManager.getInstance().getInternalOptionValue(TypeToken.of(Double.class), user, Options.ABANDON_RETURN_RATIO, claim);
                 if (GriefDefenderPlugin.getInstance().isEconomyModeEnabled()) {
-                    final Account playerAccount = GriefDefenderPlugin.getInstance().economyService.get().getOrCreateAccount(playerData.playerID).orElse(null);
+                    final Account playerAccount = GriefDefenderPlugin.getInstance().economyService.get().getOrCreateAccount(user.getUniqueId()).orElse(null);
                     if (playerAccount == null) {
                         return;
                     }
@@ -200,7 +236,7 @@ public class CommandClaimAbandon extends BaseCommand {
                     if (result.getResult() == ResultType.SUCCESS) {
                         final Component message = GriefDefenderPlugin.getInstance().messageData.getMessage(MessageStorage.ECONOMY_CLAIM_ABANDON_SUCCESS, ImmutableMap.of(
                                 "amount", refund));
-                        GriefDefenderPlugin.sendMessage(player, message);
+                        GriefDefenderPlugin.sendMessage(source, message);
                     }
                 } else {
                     int newAccruedClaimCount = playerData.getAccruedClaimBlocks() - ((int) Math.ceil(claim.getClaimBlocks() * (1 - abandonReturnRatio)));
@@ -208,7 +244,7 @@ public class CommandClaimAbandon extends BaseCommand {
                     int remainingBlocks = playerData.getRemainingClaimBlocks();
                     final Component message = GriefDefenderPlugin.getInstance().messageData.getMessage(MessageStorage.ABANDON_SUCCESS, ImmutableMap.of(
                             "amount", remainingBlocks));
-                    GriefDefenderPlugin.sendMessage(player, message);
+                    GriefDefenderPlugin.sendMessage(source, message);
                 }
             }
         };

@@ -36,8 +36,10 @@ import com.griefdefender.api.permission.option.Options;
 import com.griefdefender.claim.GDClaim;
 import com.griefdefender.configuration.MessageStorage;
 import com.griefdefender.event.GDCauseStackManager;
+import com.griefdefender.internal.util.NMSUtil;
 import com.griefdefender.permission.GDPermissionManager;
 import com.griefdefender.permission.flag.GDFlags;
+import com.griefdefender.permission.option.GDOptions;
 import com.griefdefender.storage.BaseStorage;
 import com.griefdefender.util.PaginationUtil;
 import net.kyori.text.Component;
@@ -81,18 +83,22 @@ public class CommandEventHandler implements Listener {
        // CauseTracker.getInstance().getCauseStack().add(event.getSender());
     }
 
-    @EventHandler(priority = EventPriority.MONITOR)
-    public void onPlayerChatPost(AsyncPlayerChatEvent event) {
+    @EventHandler(priority = EventPriority.LOWEST)
+    public void onPlayerChatInput(AsyncPlayerChatEvent event) {
         final Player player = event.getPlayer();
         final GDPlayerData playerData = this.dataStore.getOrCreatePlayerData(player.getWorld(), player.getUniqueId());
-        final Iterator<Player> iterator = event.getRecipients().iterator();
         // check for command input
         if (playerData.isWaitingForInput()) {
             playerData.commandInput = event.getMessage();
-            playerData.trustAddConsumer.accept(player);
+            playerData.commandConsumer.accept(player);
             event.setCancelled(true);
-            return;
         }
+    }
+
+    @EventHandler(priority = EventPriority.MONITOR)
+    public void onPlayerChatPost(AsyncPlayerChatEvent event) {
+        final Player player = event.getPlayer();
+        final Iterator<Player> iterator = event.getRecipients().iterator();
 
         while (iterator.hasNext()) {
             final Player receiver = iterator.next();
@@ -153,7 +159,13 @@ public class CommandEventHandler implements Listener {
                 pluginId = pluginCommand.getPlugin().getName().toLowerCase();
             }
             if (pluginId == null) {
-                pluginId = "minecraft";
+                // check modId for hybrid servers
+                final String modId = NMSUtil.getInstance().getCommandModId(command);
+                if (modId != null) {
+                    pluginId = modId;
+                } else {
+                    pluginId = "minecraft";
+                }
             }
         }
 
@@ -172,17 +184,19 @@ public class CommandEventHandler implements Listener {
             return;
         }
 
-        final int combatTimeRemaining = playerData.getPvpCombatTimeRemaining();
+        final int combatTimeRemaining = playerData.getPvpCombatTimeRemaining(claim);
         final boolean inPvpCombat = combatTimeRemaining > 0;
-        final boolean pvpCombatCommand = GDPermissionManager.getInstance().getInternalOptionValue(TypeToken.of(Boolean.class), player, Options.PVP_COMBAT_COMMAND);
-        if (!pvpCombatCommand && inPvpCombat) {
-            final Component denyMessage = GriefDefenderPlugin.getInstance().messageData.getMessage(MessageStorage.PVP_IN_COMBAT_NOT_ALLOWED,
-                    ImmutableMap.of(
-                    "time-remaining", combatTimeRemaining));
-            GriefDefenderPlugin.sendMessage(player, denyMessage);
-            event.setCancelled(true);
-            GDTimings.PLAYER_COMMAND_EVENT.stopTiming();
-            return;
+        if (GDOptions.PVP_COMBAT_COMMAND) {
+            final boolean pvpCombatCommand = GDPermissionManager.getInstance().getInternalOptionValue(TypeToken.of(Boolean.class), player, Options.PVP_COMBAT_COMMAND, claim);
+            if (!pvpCombatCommand && inPvpCombat) {
+                final Component denyMessage = GriefDefenderPlugin.getInstance().messageData.getMessage(MessageStorage.PVP_IN_COMBAT_NOT_ALLOWED,
+                        ImmutableMap.of(
+                        "time-remaining", combatTimeRemaining));
+                GriefDefenderPlugin.sendMessage(player, denyMessage);
+                event.setCancelled(true);
+                GDTimings.PLAYER_COMMAND_EVENT.stopTiming();
+                return;
+            }
         }
 
         String commandBaseTarget = pluginId + ":" + command;
@@ -223,7 +237,7 @@ public class CommandEventHandler implements Listener {
                 final Component denyMessage = GriefDefenderPlugin.getInstance().messageData.getMessage(MessageStorage.COMMAND_BLOCKED,
                         ImmutableMap.of(
                         "command", command,
-                        "player", claim.getOwnerName()));
+                        "player", claim.getOwnerDisplayName()));
                 GriefDefenderPlugin.sendMessage(player, denyMessage);
                 event.setCancelled(true);
                 GDTimings.PLAYER_COMMAND_EVENT.stopTiming();
@@ -254,7 +268,7 @@ public class CommandEventHandler implements Listener {
                 final Component denyMessage = GriefDefenderPlugin.getInstance().messageData.getMessage(MessageStorage.COMMAND_BLOCKED,
                         ImmutableMap.of(
                         "command", command,
-                        "player", claim.getOwnerName()));
+                        "player", claim.getOwnerDisplayName()));
                 GriefDefenderPlugin.sendMessage(player, denyMessage);
                 event.setCancelled(true);
                 GDTimings.PLAYER_COMMAND_EVENT.stopTiming();
@@ -262,5 +276,23 @@ public class CommandEventHandler implements Listener {
             }
         }
         GDTimings.PLAYER_COMMAND_EVENT.stopTiming();
+    }
+
+    @EventHandler(priority = EventPriority.MONITOR)
+    public void onPlayerCommandMonitor(PlayerCommandPreprocessEvent event) {
+        String message = event.getMessage();
+        String arguments = "";
+        String command = "";
+        if (!message.contains(" ")) {
+            command = message.replace("/", "");
+        } else {
+            command = message.substring(0, message.indexOf(" ")).replace("/", "");
+            arguments = message.substring(message.indexOf(" ") + 1, message.length());
+        }
+        if (command.equalsIgnoreCase("datapack") && (arguments.contains("enable") || arguments.contains("disable"))) {
+            if (GriefDefenderPlugin.getInstance().getTagProvider() != null) {
+                GriefDefenderPlugin.getInstance().getTagProvider().refresh();
+            }
+        }
     }
 }

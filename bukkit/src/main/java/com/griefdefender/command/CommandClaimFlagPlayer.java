@@ -51,14 +51,14 @@ public class CommandClaimFlagPlayer extends ClaimFlagBase  {
 
     @CommandCompletion("@gdplayers @gdflags @gdmcids @gdtristates @gdcontexts @gddummy")
     @CommandAlias("cfp")
-    @Description("Gets/Sets flag permission for a player in claim you are standing in.")
+    @Description("%flag-player")
     @Syntax("<player> <flag> <target> <value> [context[key=value]]")
     @Subcommand("flag player")
     public void execute(Player src, OfflinePlayer player, @Optional String[] args) throws InvalidCommandArgument {
         this.subject = PermissionHolderCache.getInstance().getOrCreateUser(player);
         this.friendlySubjectName = player.getName();
 
-        if (PermissionUtil.getInstance().getPermissionValue(this.subject, GDPermissions.COMMAND_ADMIN_CLAIMS) == Tristate.TRUE && !src.hasPermission(GDPermissions.SET_ADMIN_FLAGS)) {
+        if (src.hasPermission(GDPermissions.COMMAND_ADMIN_CLAIMS) && !src.hasPermission(GDPermissions.SET_ADMIN_FLAGS)) {
             GriefDefenderPlugin.sendMessage(src, MessageCache.getInstance().PERMISSION_PLAYER_ADMIN_FLAGS);
             return;
         }

@@ -31,6 +31,7 @@ import com.google.common.collect.ImmutableSet;
 import com.griefdefender.GDPlayerData;
 import com.griefdefender.GriefDefenderPlugin;
 import com.griefdefender.api.GriefDefender;
+import com.griefdefender.api.Tristate;
 import com.griefdefender.api.claim.Claim;
 import com.griefdefender.api.claim.ClaimContexts;
 import com.griefdefender.api.claim.ClaimResult;
@@ -45,8 +46,10 @@ import com.griefdefender.claim.GDClaim;
 import com.griefdefender.claim.GDClaimManager;
 import com.griefdefender.claim.GDClaimResult;
 import com.griefdefender.configuration.ClaimTemplateStorage;
+import com.griefdefender.configuration.FlagConfig;
 import com.griefdefender.configuration.GriefDefenderConfig;
 import com.griefdefender.configuration.MessageStorage;
+import com.griefdefender.configuration.OptionConfig;
 import com.griefdefender.configuration.type.ConfigBase;
 import com.griefdefender.configuration.type.GlobalConfig;
 import com.griefdefender.event.GDCauseStackManager;
@@ -62,6 +65,7 @@ import net.kyori.text.TextComponent;
 import net.kyori.text.format.TextColor;
 import org.spongepowered.api.Sponge;
 import org.spongepowered.api.command.CommandSource;
+import org.spongepowered.api.entity.living.player.Player;
 import org.spongepowered.api.world.Location;
 import org.spongepowered.api.world.World;
 import org.spongepowered.api.world.storage.WorldProperties;
@@ -150,8 +154,11 @@ public abstract class BaseStorage {
         return claimResult;
     }
 
-    public ClaimResult deleteAllAdminClaims(CommandSource src, World world) {
-        GDClaimManager claimWorldManager = this.claimWorldManagers.get(world.getProperties().getUniqueId());
+    public ClaimResult deleteAllAdminClaims(Player source, UUID worldUniqueId) {
+        if (worldUniqueId == null) {
+            worldUniqueId = source.getWorld().getUniqueId();
+        }
+        GDClaimManager claimWorldManager = this.claimWorldManagers.get(worldUniqueId);
         if (claimWorldManager == null) {
             return new GDClaimResult(ClaimResultType.CLAIMS_DISABLED);
         }
@@ -159,6 +166,9 @@ public abstract class BaseStorage {
         List<Claim> claimsToDelete = new ArrayList<Claim>();
         boolean adminClaimFound = false;
         for (Claim claim : claimWorldManager.getWorldClaims()) {
+            if (worldUniqueId != null && !claim.getWorldUniqueId().equals(worldUniqueId)) {
+                continue;
+            }
             if (claim.isAdminClaim()) {
                 claimsToDelete.add(claim);
                 adminClaimFound = true;
@@ -169,8 +179,8 @@ public abstract class BaseStorage {
             return new GDClaimResult(ClaimResultType.CLAIM_NOT_FOUND);
         }
 
-        GDCauseStackManager.getInstance().pushCause(src);
-        GDRemoveClaimEvent event = new GDRemoveClaimEvent(ImmutableList.copyOf(claimsToDelete));
+        GDCauseStackManager.getInstance().pushCause(source);
+        GDRemoveClaimEvent.Delete event = new GDRemoveClaimEvent.Delete(ImmutableList.copyOf(claimsToDelete));
         GriefDefender.getEventManager().post(event);
         GDCauseStackManager.getInstance().popCause();
         if (event.cancelled()) {
@@ -195,25 +205,43 @@ public abstract class BaseStorage {
         for (Claim claim : claimsToDelete) {
             GDClaimManager claimWorldManager = this.claimWorldManagers.get(claim.getWorldUniqueId());
             claimWorldManager.deleteClaimInternal(claim, true);
+            user.getInternalPlayerData().revertClaimVisual((GDClaim) claim);
         }
 
         return;
     }
 
     public void deleteClaimsForPlayer(UUID playerID) {
+        this.deleteClaimsForPlayer(playerID, null);
+    }
+
+    public void deleteClaimsForPlayer(UUID playerID, UUID worldUniqueId) {
         if (BaseStorage.USE_GLOBAL_PLAYER_STORAGE && playerID != null) {
-            final GDPlayerData playerData = BaseStorage.GLOBAL_PLAYER_DATA.get(playerID);
-            List<Claim> claimsToDelete = new ArrayList<>(playerData.getInternalClaims());
+            Set<Claim> claims = new HashSet<>();
+            if (worldUniqueId != null) {
+                final GDClaimManager claimManager = GriefDefenderPlugin.getInstance().dataStore.getClaimWorldManager(worldUniqueId);
+                claims = claimManager.getInternalPlayerClaims(playerID);
+            } else {
+                final GDPlayerData playerData = BaseStorage.GLOBAL_PLAYER_DATA.get(playerID);
+                claims = playerData.getInternalClaims();
+            }
+            List<Claim> claimsToDelete = new ArrayList<>(claims);
             for (Claim claim : claimsToDelete) {
+                if (worldUniqueId != null && !claim.getWorldUniqueId().equals(worldUniqueId)) {
+                    continue;
+                }
                 GDClaimManager claimWorldManager = this.claimWorldManagers.get(claim.getWorldUniqueId());
                 claimWorldManager.deleteClaimInternal(claim, true);
+                claims.remove(claim);
             }
 
-            playerData.getInternalClaims().clear();
             return;
         }
 
         for (GDClaimManager claimWorldManager : this.claimWorldManagers.values()) {
+            if (worldUniqueId != null && !claimWorldManager.getWorldId().equals(worldUniqueId)) {
+                continue;
+            }
             Set<Claim> claims = claimWorldManager.getInternalPlayerClaims(playerID);
             if (playerID == null) {
                 claims = claimWorldManager.getWorldClaims();
@@ -224,6 +252,9 @@ public abstract class BaseStorage {
 
             List<Claim> claimsToDelete = new ArrayList<Claim>();
             for (Claim claim : claims) {
+                if (worldUniqueId != null && !claim.getWorldUniqueId().equals(worldUniqueId)) {
+                    continue;
+                }
                 if (!claim.isAdminClaim()) {
                     claimsToDelete.add(claim);
                 }
@@ -248,17 +279,12 @@ public abstract class BaseStorage {
 
     public GDClaim getClaimAtPlayer(Location<World> location, GDPlayerData playerData, boolean useBorderBlockRadius) {
         GDClaimManager claimManager = this.getClaimWorldManager(location.getExtent().getUniqueId());
-        return (GDClaim) claimManager.getClaimAt(location, null, playerData, useBorderBlockRadius);
-    }
-
-    public GDClaim getClaimAtPlayer(Location<World> location, GDClaim cachedClaim, GDPlayerData playerData, boolean useBorderBlockRadius) {
-        GDClaimManager claimManager = this.getClaimWorldManager(location.getExtent().getUniqueId());
-        return (GDClaim) claimManager.getClaimAt(location, cachedClaim, playerData, useBorderBlockRadius);
+        return (GDClaim) claimManager.getClaimAt(location, playerData, useBorderBlockRadius);
     }
 
     public GDClaim getClaimAt(Location<World> location, GDClaim cachedClaim) {
         GDClaimManager claimManager = this.getClaimWorldManager(location.getExtent().getUniqueId());
-        return (GDClaim) claimManager.getClaimAt(location, cachedClaim, null, false);
+        return (GDClaim) claimManager.getClaimAt(location, null, false);
     }
 
     public GDPlayerData getPlayerData(World world, UUID playerUniqueId) {
@@ -273,6 +299,13 @@ public abstract class BaseStorage {
     }
 
     public GDPlayerData getOrCreateGlobalPlayerData(UUID playerUniqueId) {
+        if (BaseStorage.USE_GLOBAL_PLAYER_STORAGE) {
+            final GDPlayerData playerData = GLOBAL_PLAYER_DATA.get(playerUniqueId);
+            if (playerData != null) {
+                return playerData;
+            }
+        }
+
         GDClaimManager claimWorldManager = this.getClaimWorldManager(null);
         return claimWorldManager.getOrCreatePlayerData(playerUniqueId);
     }
@@ -282,6 +315,13 @@ public abstract class BaseStorage {
     }
 
     public GDPlayerData getOrCreatePlayerData(UUID worldUniqueId, UUID playerUniqueId) {
+        if (BaseStorage.USE_GLOBAL_PLAYER_STORAGE) {
+            final GDPlayerData playerData = GLOBAL_PLAYER_DATA.get(playerUniqueId);
+            if (playerData != null) {
+                return playerData;
+            }
+        }
+
         GDClaimManager claimWorldManager = this.getClaimWorldManager(worldUniqueId);
         return claimWorldManager.getOrCreatePlayerData(playerUniqueId);
     }
@@ -318,8 +358,9 @@ public abstract class BaseStorage {
         // Admin defaults
         Set<Context> contexts = new HashSet<>();
         contexts.add(ClaimContexts.ADMIN_DEFAULT_CONTEXT);
-        final GriefDefenderConfig<GlobalConfig> activeConfig = GriefDefenderPlugin.getGlobalConfig();
-        final Map<String, Boolean> adminDefaultFlags = activeConfig.getConfig().permissionCategory.getFlagDefaults(ClaimTypes.ADMIN.getName().toLowerCase());
+        final FlagConfig flagConfig = GriefDefenderPlugin.getFlagConfig();
+        final OptionConfig optionConfig = GriefDefenderPlugin.getOptionConfig();
+        final Map<String, Boolean> adminDefaultFlags = flagConfig.getConfig().defaultFlagCategory.getFlagDefaults(ClaimTypes.ADMIN.getName().toLowerCase());
         if (adminDefaultFlags != null && !adminDefaultFlags.isEmpty()) {
             this.setDefaultFlags(contexts, adminDefaultFlags);
         }
@@ -327,48 +368,51 @@ public abstract class BaseStorage {
         // Basic defaults
         contexts = new HashSet<>();
         contexts.add(ClaimContexts.BASIC_DEFAULT_CONTEXT);
-        final Map<String, Boolean> basicDefaultFlags = activeConfig.getConfig().permissionCategory.getFlagDefaults(ClaimTypes.BASIC.getName().toLowerCase());
+        final Map<String, Boolean> basicDefaultFlags = flagConfig.getConfig().defaultFlagCategory.getFlagDefaults(ClaimTypes.BASIC.getName().toLowerCase());
         if (basicDefaultFlags != null && !basicDefaultFlags.isEmpty()) {
             this.setDefaultFlags(contexts, basicDefaultFlags);
         }
-        final Map<String, String> basicDefaultOptions = activeConfig.getConfig().permissionCategory.getBasicOptionDefaults();
+        final Map<String, String> basicDefaultOptions = optionConfig.getConfig().defaultOptionCategory.getBasicOptionDefaults();
         contexts = new HashSet<>();
         contexts.add(ClaimTypes.BASIC.getDefaultContext());
-        this.setDefaultOptions(ClaimTypes.BASIC.toString(), contexts, new HashMap<>(basicDefaultOptions));
+        this.setDefaultOptions(contexts, new HashMap<>(basicDefaultOptions));
 
         // Town defaults
         contexts = new HashSet<>();
         contexts.add(ClaimContexts.TOWN_DEFAULT_CONTEXT);
-        final Map<String, Boolean> townDefaultFlags = activeConfig.getConfig().permissionCategory.getFlagDefaults(ClaimTypes.TOWN.getName().toLowerCase());
-        final Map<String, String> townDefaultOptions = activeConfig.getConfig().permissionCategory.getTownOptionDefaults();
+        final Map<String, Boolean> townDefaultFlags = flagConfig.getConfig().defaultFlagCategory.getFlagDefaults(ClaimTypes.TOWN.getName().toLowerCase());
+        final Map<String, String> townDefaultOptions = optionConfig.getConfig().defaultOptionCategory.getTownOptionDefaults();
         if (townDefaultFlags != null && !townDefaultFlags.isEmpty()) {
             this.setDefaultFlags(contexts, townDefaultFlags);
         }
         contexts = new HashSet<>();
         contexts.add(ClaimTypes.TOWN.getDefaultContext());
-        this.setDefaultOptions(ClaimTypes.TOWN.toString(), contexts, new HashMap<>(townDefaultOptions));
+        this.setDefaultOptions(contexts, new HashMap<>(townDefaultOptions));
 
         // Subdivision defaults
         contexts = new HashSet<>();
         contexts.add(ClaimTypes.SUBDIVISION.getDefaultContext());
-        final Map<String, String> subdivisionDefaultOptions = activeConfig.getConfig().permissionCategory.getSubdivisionOptionDefaults();
-        this.setDefaultOptions(ClaimTypes.SUBDIVISION.toString(), contexts, new HashMap<>(subdivisionDefaultOptions));
+        final Map<String, String> subdivisionDefaultOptions = optionConfig.getConfig().defaultOptionCategory.getSubdivisionOptionDefaults();
+        this.setDefaultOptions(contexts, new HashMap<>(subdivisionDefaultOptions));
 
         // Wilderness defaults
         contexts = new HashSet<>();
         contexts.add(ClaimContexts.WILDERNESS_DEFAULT_CONTEXT);
-        final Map<String, Boolean> wildernessDefaultFlags = activeConfig.getConfig().permissionCategory.getFlagDefaults(ClaimTypes.WILDERNESS.getName().toLowerCase());
+        final Map<String, Boolean> wildernessDefaultFlags = flagConfig.getConfig().defaultFlagCategory.getFlagDefaults(ClaimTypes.WILDERNESS.getName().toLowerCase());
         this.setDefaultFlags(contexts, wildernessDefaultFlags);
 
         // Global default options
         contexts = new HashSet<>();
-        contexts.add(ClaimContexts.GLOBAL_DEFAULT_CONTEXT);
-        final Map<String, Boolean> globalDefaultFlags = activeConfig.getConfig().permissionCategory.getFlagDefaults("global");
+        contexts.add(ClaimContexts.USER_DEFAULT_CONTEXT);
+        final Map<String, Boolean> globalDefaultFlags = flagConfig.getConfig().defaultFlagCategory.getFlagDefaults("user");
         this.setDefaultFlags(contexts, globalDefaultFlags);
-        final Map<String, String> globalDefaultOptions = activeConfig.getConfig().permissionCategory.getUserOptionDefaults();
-        this.setDefaultOptions(ClaimContexts.GLOBAL_DEFAULT_CONTEXT.getName(), contexts, new HashMap<>(globalDefaultOptions));
-        //GriefDefenderPlugin.getInstance().getPermissionProvider().setTransientPermission(GriefDefenderPlugin.DEFAULT_HOLDER, "griefdefender", false, new HashSet<>());
-        activeConfig.save();
+        contexts = new HashSet<>();
+        contexts.add(ClaimContexts.GLOBAL_DEFAULT_CONTEXT);
+        final Map<String, String> globalDefaultOptions = optionConfig.getConfig().defaultOptionCategory.getUserOptionDefaults();
+        this.setDefaultOptions(contexts, new HashMap<>(globalDefaultOptions));
+        //GriefDefenderPlugin.getInstance().getPermissionProvider().setTransientPermission(GriefDefenderPlugin.GD_DEFAULT_HOLDER, "griefdefender", false, new HashSet<>());
+        flagConfig.save();
+        optionConfig.save();
     }
 
     private void setDefaultFlags(Set<Context> contexts, Map<String, Boolean> defaultFlags) {
@@ -382,19 +426,13 @@ public abstract class BaseStorage {
                 if (flag == null) {
                     continue;
                 }
-                PermissionUtil.getInstance().setTransientPermission(GriefDefenderPlugin.DEFAULT_HOLDER, flag.getPermission(), mapEntry.getValue(), contexts);
-                if (flag == Flags.ENTITY_DAMAGE) {
-                    // allow monsters to be attacked by default
-                    contexts.add(FlagContexts.TARGET_TYPE_MONSTER);
-                    PermissionUtil.getInstance().setTransientPermission(GriefDefenderPlugin.DEFAULT_HOLDER, flag.getPermission(), true, contexts);
-                    contexts.remove(FlagContexts.TARGET_TYPE_MONSTER);
-                }
+                PermissionUtil.getInstance().setTransientPermission(GriefDefenderPlugin.GD_DEFAULT_HOLDER, flag.getPermission(), Tristate.fromBoolean(mapEntry.getValue()), contexts);
             }
-            PermissionUtil.getInstance().refreshCachedData(GriefDefenderPlugin.DEFAULT_HOLDER);
+            PermissionUtil.getInstance().refreshCachedData(GriefDefenderPlugin.GD_DEFAULT_HOLDER);
         });
     }
 
-    private void setDefaultOptions(String type, Set<Context> contexts, Map<String, String> defaultOptions) {
+    private void setDefaultOptions(Set<Context> contexts, Map<String, String> defaultOptions) {
         final Map<Set<Context>, Map<String, String>> permanentOptions = PermissionUtil.getInstance().getPermanentOptions(GriefDefenderPlugin.DEFAULT_HOLDER);
         final Map<String, String> options = permanentOptions.get(contexts);
         GriefDefenderPlugin.getInstance().executor.execute(() -> {
@@ -420,9 +458,9 @@ public abstract class BaseStorage {
                         continue;
                     }
                 }
-                PermissionUtil.getInstance().setTransientOption(GriefDefenderPlugin.DEFAULT_HOLDER, option.getPermission(), optionEntry.getValue(), contexts);
+                PermissionUtil.getInstance().setTransientOption(GriefDefenderPlugin.GD_OPTION_HOLDER, option.getPermission(), optionEntry.getValue(), contexts);
             }
-            PermissionUtil.getInstance().refreshCachedData(GriefDefenderPlugin.DEFAULT_HOLDER);
+            PermissionUtil.getInstance().refreshCachedData(GriefDefenderPlugin.GD_OPTION_HOLDER);
         });
     }
 

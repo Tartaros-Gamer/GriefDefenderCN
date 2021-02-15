@@ -67,7 +67,7 @@ import java.util.function.Consumer;
 public class CommandClaimSchematic extends BaseCommand {
 
     @CommandAlias("claimschematic")
-    @Description("Manages claim schematics. Use '/claimschematic create <name>' to create a live backup of claim.")
+    @Description("%schematic")
     @Syntax("<create|delete> <name>")
     @Subcommand("schematic")
     public void execute(Player player, @Optional String[] args) throws CommandException, InvalidCommandArgument {
@@ -150,9 +150,9 @@ public class CommandClaimSchematic extends BaseCommand {
         return confirm -> {
             final Component schematicConfirmationText = TextComponent.builder("")
                     .append("\n[")
-                    .append("Confirm", TextColor.GREEN)
+                    .append(MessageCache.getInstance().LABEL_CONFIRM.color(TextColor.GREEN))
                     .append("]\n")
-                    .clickEvent(ClickEvent.runCommand(GDCallbackHolder.getInstance().createCallbackRunCommand(createConfirmationConsumer(src, claim, schematic))))
+                    .clickEvent(ClickEvent.runCommand(GDCallbackHolder.getInstance().createCallbackRunCommand(src, createConfirmationConsumer(src, claim, schematic), true)))
                     .hoverEvent(HoverEvent.showText(GriefDefenderPlugin.getInstance().messageData.getMessage(MessageStorage.SCHEMATIC_RESTORE_CONFIRMATION))).build();
             TextAdapter.sendComponent(src, schematicConfirmationText);
         };

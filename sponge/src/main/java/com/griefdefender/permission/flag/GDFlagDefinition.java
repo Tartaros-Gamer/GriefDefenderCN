@@ -32,12 +32,12 @@ import java.util.List;
 import java.util.Set;
 
 import com.griefdefender.GriefDefenderPlugin;
+import com.griefdefender.api.Subject;
 import com.griefdefender.api.Tristate;
 import com.griefdefender.api.permission.Context;
 import com.griefdefender.api.permission.flag.Flag;
 import com.griefdefender.api.permission.flag.FlagData;
 import com.griefdefender.api.permission.flag.FlagDefinition;
-import com.griefdefender.registry.FlagDefinitionRegistryModule;
 
 import net.kyori.text.Component;
 import net.kyori.text.TextComponent;
@@ -46,34 +46,23 @@ import net.kyori.text.serializer.plain.PlainComponentSerializer;
 public class GDFlagDefinition implements FlagDefinition {
 
     private boolean enabled = true;
+    private boolean adminDefinition = false;
     private Set<Context> definitionContexts = new HashSet<>();
     private List<FlagData> data = new ArrayList<>();
+    private Subject subject;
     private String displayName;
     private String groupName;
     private Tristate defaultValue = Tristate.UNDEFINED;
     private Component description;
 
-    public GDFlagDefinition(Flag flag, Set<Context> contexts, String displayName, Component description) {
-        this.data.add(new GDFlagData(flag, contexts));
-        this.displayName = displayName;
-        this.description = description;
-        FlagDefinitionRegistryModule.getInstance().registerCustomType(this);
-    }
-
-    public GDFlagDefinition(List<FlagData> flagData, String displayName, Component description) {
+    public GDFlagDefinition(List<FlagData> flagData, String displayName, Component description, String groupName, Subject subject, boolean isAdmin, Set<Context> contexts) {
         this.data = flagData;
         this.displayName = displayName;
         this.description = description;
-        FlagDefinitionRegistryModule.getInstance().registerCustomType(this);
-    }
-
-    public void addFlagData(Flag flag, Set<Context> contexts) {
-        this.data.add(new GDFlagData(flag, contexts));
-    }
-
-    @Override
-    public void addFlagData(FlagData flagData) {
-        this.data.add(new GDFlagData(flagData.getFlag(), flagData.getContexts()));
+        this.groupName = groupName;
+        this.definitionContexts = contexts;
+        this.subject = subject;
+        this.adminDefinition = isAdmin;
     }
 
     @Override
@@ -110,11 +99,6 @@ public class GDFlagDefinition implements FlagDefinition {
     }
 
     @Override
-    public void setContexts(Set<Context> contexts) {
-        this.definitionContexts = contexts;
-    }
-
-    @Override
     public boolean isEnabled() {
         return this.enabled;
     }
@@ -122,6 +106,11 @@ public class GDFlagDefinition implements FlagDefinition {
     @Override
     public void setIsEnabled(boolean val) {
         this.enabled = val;
+    }
+
+    @Override
+    public boolean isAdmin() {
+        return this.adminDefinition;
     }
 
     @Override
@@ -140,13 +129,13 @@ public class GDFlagDefinition implements FlagDefinition {
     }
 
     @Override
-    public void setGroupName(String group) {
-        this.groupName = group;
+    public Tristate getDefaultValue() {
+        return this.defaultValue;
     }
 
     @Override
-    public Tristate getDefaultValue() {
-        return this.defaultValue;
+    public Subject getSubject() {
+        return this.subject;
     }
 
     @Override
@@ -157,8 +146,10 @@ public class GDFlagDefinition implements FlagDefinition {
     public static class FlagDefinitionBuilder implements Builder {
 
         private boolean enabled = true;
-        private Set<Context> definitionContexts = new HashSet<>();
+        private boolean isAdmin = false;
+        private Set<Context> contexts = new HashSet<>();
         private List<FlagData> data = new ArrayList<>();
+        private Subject subject = GriefDefenderPlugin.GD_DEFINITION_HOLDER;
         private String displayName;
         private String groupName;
         private Tristate defaultValue = Tristate.UNDEFINED;
@@ -171,8 +162,26 @@ public class GDFlagDefinition implements FlagDefinition {
         }
 
         @Override
+        public Builder admin(boolean value) {
+            this.isAdmin = value;
+            return this;
+        }
+
+        @Override
+        public Builder group(String group) {
+            this.groupName = group;
+            return this;
+        }
+
+        @Override
         public Builder defaultValue(Tristate value) {
             this.defaultValue = value;
+            return this;
+        }
+
+        @Override
+        public Builder flagData(FlagData data) {
+            this.data.add(data);
             return this;
         }
 
@@ -183,8 +192,14 @@ public class GDFlagDefinition implements FlagDefinition {
         }
 
         @Override
+        public Builder context(Context context) {
+            this.contexts.add(context);
+            return this;
+        }
+
+        @Override
         public Builder contexts(Set<Context> contexts) {
-            this.definitionContexts = contexts;
+            this.contexts = contexts;
             return this;
         }
 
@@ -201,14 +216,22 @@ public class GDFlagDefinition implements FlagDefinition {
         }
 
         @Override
+        public Builder subject(Subject subject) {
+            this.subject = subject;
+            return this;
+        }
+
+        @Override
         public Builder reset() {
             this.enabled = true;
-            this.definitionContexts = new HashSet<>();
+            this.isAdmin = false;
+            this.contexts = new HashSet<>();
             this.data = new ArrayList<>();
             this.displayName = "";
             this.groupName = "";
             this.defaultValue = Tristate.UNDEFINED;
             this.description = TextComponent.empty();
+            this.subject = GriefDefenderPlugin.GD_DEFINITION_HOLDER;
             return this;
         }
 
@@ -218,11 +241,9 @@ public class GDFlagDefinition implements FlagDefinition {
             checkNotNull(this.displayName);
             checkNotNull(this.groupName);
             checkNotNull(this.description);
-            final GDFlagDefinition definition = new GDFlagDefinition(this.data, this.displayName, this.description);
-            definition.setContexts(this.definitionContexts);
+            final GDFlagDefinition definition = new GDFlagDefinition(this.data, this.displayName, this.description, this.groupName, this.subject, this.isAdmin, this.contexts);
             definition.setIsEnabled(this.enabled);
             definition.setDefaultValue(this.defaultValue);
-            definition.setGroupName(this.groupName);
             return definition;
         }
         

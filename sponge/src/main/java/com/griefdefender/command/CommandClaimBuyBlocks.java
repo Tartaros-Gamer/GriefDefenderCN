@@ -37,7 +37,6 @@ import com.griefdefender.GDPlayerData;
 import com.griefdefender.GriefDefenderPlugin;
 import com.griefdefender.api.permission.option.Options;
 import com.griefdefender.cache.MessageCache;
-import com.griefdefender.claim.GDClaim;
 import com.griefdefender.configuration.MessageStorage;
 import com.griefdefender.permission.GDPermissionManager;
 import com.griefdefender.permission.GDPermissions;
@@ -57,7 +56,7 @@ import java.math.BigDecimal;
 public class CommandClaimBuyBlocks extends BaseCommand {
 
     @CommandAlias("buyclaim|buyclaimblocks|buyblocks")
-    @Description("Purchases additional claim blocks with server money.\nNote: Requires economy plugin.")
+    @Description("%buy-blocks")
     @Syntax("[<amount>]")
     @Subcommand("buy blocks")
     public void execute(Player player, @Optional Integer blockCount) {
@@ -80,16 +79,9 @@ public class CommandClaimBuyBlocks extends BaseCommand {
         }
 
         final GDPlayerData playerData = GriefDefenderPlugin.getInstance().dataStore.getOrCreatePlayerData(player.getWorld(), player.getUniqueId());
-        final GDClaim claim = GriefDefenderPlugin.getInstance().dataStore.getClaimAt(player.getLocation());
         final double economyBlockCost = GDPermissionManager.getInstance().getInternalOptionValue(TypeToken.of(Double.class), player, Options.ECONOMY_BLOCK_COST);
-        final double economyBlockSell = GDPermissionManager.getInstance().getInternalOptionValue(TypeToken.of(Double.class), player, Options.ECONOMY_BLOCK_SELL_RETURN);
-        if (economyBlockCost == 0 && economyBlockSell == 0) {
+        if (economyBlockCost <= 0) {
             GriefDefenderPlugin.sendMessage(player, MessageCache.getInstance().ECONOMY_BLOCK_BUY_SELL_DISABLED);
-            return;
-        }
-
-        if (economyBlockCost == 0) {
-            GriefDefenderPlugin.sendMessage(player, MessageCache.getInstance().ECONOMY_BLOCK_ONLY_SELL);
             return;
         }
 

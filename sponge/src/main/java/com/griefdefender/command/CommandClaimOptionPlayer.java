@@ -45,9 +45,9 @@ public class CommandClaimOptionPlayer extends ClaimOptionBase {
         super(ClaimSubjectType.PLAYER);
     }
 
-    @CommandCompletion("@gdplayers @gdoptions @gddummy")
+    @CommandCompletion("@gdplayers @gdoptions @gdcontexts @gddummy")
     @CommandAlias("cop")
-    @Description("Gets/Sets option for a player in claim you are standing in.")
+    @Description("%option-player")
     @Syntax("<player> <option> <value> [context[key=value]]")
     @Subcommand("option player")
     public void execute(Player src, User player, @Optional String[] args) throws InvalidCommandArgument {

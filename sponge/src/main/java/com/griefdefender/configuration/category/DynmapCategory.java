@@ -29,11 +29,21 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+import com.griefdefender.api.claim.ClaimType;
+import com.griefdefender.api.claim.ClaimTypes;
+import com.griefdefender.registry.ClaimTypeRegistryModule;
+
 import ninja.leaping.configurate.objectmapping.Setting;
 import ninja.leaping.configurate.objectmapping.serialize.ConfigSerializable;
 
 @ConfigSerializable
 public class DynmapCategory {
+
+    @Setting("enabled")
+    public boolean enabled = true;
+
+    @Setting("claimtype-styles")
+    public Map<String, DynmapOwnerStyleCategory> claimTypeStyles = new HashMap<>();
 
     @Setting("owner-styles")
     public Map<String, DynmapOwnerStyleCategory> ownerStyles = new HashMap<>();
@@ -57,6 +67,7 @@ public class DynmapCategory {
     public String infoWindowBasic = "<div class=\"infowindow\">"
             + "Name: <span style=\"font-weight:bold;\">%claimname%</span><br/>"
             + "Owner: <span style=\"font-weight:bold;\">%owner%</span><br/>"
+            + "OwnerUUID: <span style=\"font-weight:bold;\">%owneruuid%</span><br/>"
             + "Type: <span style=\"font-weight:bold;\">%gdtype%</span><br/>"
             + "Last Seen: <span style=\"font-weight:bold;\">%lastseen%</span><br/>"
             + "Permission Trust: <span style=\"font-weight:bold;\">%managers%</span><br/>"
@@ -71,4 +82,15 @@ public class DynmapCategory {
             + "Trust: <span style=\"font-weight:bold;\">%builders%</span><br/>"
             + "Container Trust: <span style=\"font-weight:bold;\">%containers%</span><br/>"
             + "Access Trust: <span style=\"font-weight:bold;\">%accessors%</span></div>";
+
+    public DynmapCategory() {
+        for (ClaimType type : ClaimTypeRegistryModule.getInstance().getAll()) {
+            if (type == ClaimTypes.WILDERNESS) {
+                continue;
+            }
+            if (this.claimTypeStyles.get(type.getName().toLowerCase()) == null) {
+                this.claimTypeStyles.put(type.getName().toLowerCase(), new DynmapOwnerStyleCategory(type));
+            }
+        }
+    }
 }

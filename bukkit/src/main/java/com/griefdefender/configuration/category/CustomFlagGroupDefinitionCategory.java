@@ -25,11 +25,19 @@
 package com.griefdefender.configuration.category;
 
 import java.util.HashMap;
+import java.util.HashSet;
+import java.util.Iterator;
 import java.util.Map;
+import java.util.Set;
 
+import com.griefdefender.GriefDefenderPlugin;
+import com.griefdefender.api.permission.Context;
+import com.griefdefender.api.permission.flag.FlagDefinition;
+import com.griefdefender.cache.PermissionHolderCache;
+import com.griefdefender.permission.GDPermissionHolder;
 import com.griefdefender.permission.flag.GDFlagDefinition;
-import com.griefdefender.permission.flag.GDFlagDefinitions;
-
+import com.griefdefender.registry.FlagDefinitionRegistryModule;
+import com.griefdefender.util.PermissionUtil;
 import ninja.leaping.configurate.objectmapping.Setting;
 import ninja.leaping.configurate.objectmapping.serialize.ConfigSerializable;
 
@@ -50,8 +58,10 @@ public class CustomFlagGroupDefinitionCategory extends ConfigCategory {
             userGroup = new CustomFlagGroupCategory();
         }
         if (userGroup.isEnabled() && userGroup.getFlagDefinitions().isEmpty()) {
-            for (GDFlagDefinition definition : GDFlagDefinitions.USER_FLAGS) {
-                userGroup.getFlagDefinitions().put(definition.getName(), definition);
+            for (FlagDefinition definition : FlagDefinitionRegistryModule.getInstance().getAll()) {
+                if (definition.getGroupName().equalsIgnoreCase("user")) {
+                    userGroup.getFlagDefinitions().put(definition.getName(), (GDFlagDefinition) definition);
+                }
             }
             this.groups.put("user", userGroup);
         }
@@ -59,11 +69,59 @@ public class CustomFlagGroupDefinitionCategory extends ConfigCategory {
             adminGroup = new CustomFlagGroupCategory();
         }
         if (adminGroup.isEnabled() && adminGroup.getFlagDefinitions().isEmpty()) {
-            for (GDFlagDefinition definition : GDFlagDefinitions.ADMIN_FLAGS) {
-                adminGroup.getFlagDefinitions().put(definition.getName(), definition);
+            for (FlagDefinition definition : FlagDefinitionRegistryModule.getInstance().getAll()) {
+                if (definition.getGroupName().equalsIgnoreCase("admin")) {
+                    adminGroup.getFlagDefinitions().put(definition.getName(), (GDFlagDefinition) definition);
+                }
             }
             adminGroup.isAdmin = true;
             this.groups.put("admin", adminGroup);
+        }
+
+        for (CustomFlagGroupCategory group : this.groups.values()) {
+            if (!group.isEnabled()) {
+                continue;
+            }
+            for (FlagDefinition flagDefinition : group.definitions.values()) {
+                if (!flagDefinition.isEnabled()) {
+                    continue;
+                }
+                Set<Context> contexts = new HashSet<>(flagDefinition.getContexts());
+                Set<Context> defaultContexts = new HashSet<>();
+                Set<Context> overrideContexts = new HashSet<>();
+                String groupStr = null;
+                final Iterator<Context> iterator = contexts.iterator();
+                while (iterator.hasNext()) {
+                    final Context context = iterator.next();
+                    if (context.getKey().equalsIgnoreCase("gd_claim_default")) {
+                        defaultContexts.add(context);
+                    } else if (context.getKey().equalsIgnoreCase("gd_claim_override")) {
+                        if (context.getValue().equalsIgnoreCase("claim")) {
+                            iterator.remove();
+                            continue;
+                        }
+                        overrideContexts.add(context);
+                    } else if (context.getKey().equalsIgnoreCase("group")) {
+                        groupStr = context.getValue();
+                    }
+                }
+                GDPermissionHolder holder = GriefDefenderPlugin.GD_DEFINITION_HOLDER;
+                if (groupStr != null) {
+                    if (PermissionUtil.getInstance().hasGroupSubject(groupStr)) {
+                        holder = PermissionHolderCache.getInstance().getOrCreateGroup(groupStr);
+                        if (holder == null) {
+                            holder = GriefDefenderPlugin.GD_DEFINITION_HOLDER;
+                        }
+                    }
+                }
+
+                if (!defaultContexts.isEmpty()) {
+                    PermissionUtil.getInstance().setFlagDefinition(holder, flagDefinition, flagDefinition.getDefaultValue(), defaultContexts, false);
+                }
+                if (!overrideContexts.isEmpty()) {
+                    PermissionUtil.getInstance().setFlagDefinition(holder, flagDefinition, flagDefinition.getDefaultValue(), overrideContexts, false);
+                }
+            }
         }
     }
 }

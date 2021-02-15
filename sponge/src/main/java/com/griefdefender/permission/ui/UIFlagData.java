@@ -34,15 +34,18 @@ import com.griefdefender.api.claim.ClaimContexts;
 import com.griefdefender.api.permission.Context;
 import com.griefdefender.api.permission.flag.Flag;
 import com.griefdefender.api.permission.flag.Flags;
+import com.griefdefender.permission.GDPermissionHolder;
 
 import net.kyori.text.format.TextColor;
 
 public class UIFlagData {
 
+    public GDPermissionHolder holder;
     public Flag flag;
     public Map<Integer, FlagContextHolder> flagContextMap = new HashMap<>();
 
-    public UIFlagData(Flag flag, Boolean value, MenuType type, Set<Context> contexts) {
+    public UIFlagData(GDPermissionHolder holder, Flag flag, Boolean value, MenuType type, Set<Context> contexts) {
+        this.holder = holder;
         this.flag = flag;
         this.addContexts(flag, value, type, contexts);
     }
@@ -56,8 +59,23 @@ public class UIFlagData {
                 // ignore
                 return false;
             }
+
+            final boolean hasGlobalDefault = contexts.contains(ClaimContexts.GLOBAL_DEFAULT_CONTEXT);
+            final boolean hasGlobalOverride = contexts.contains(ClaimContexts.GLOBAL_OVERRIDE_CONTEXT);
+            final boolean hasUserDefault = contexts.contains(ClaimContexts.USER_DEFAULT_CONTEXT);
+            final boolean hasUserOverride = contexts.contains(ClaimContexts.USER_OVERRIDE_CONTEXT);
+
             // Context Default Types have higher priority than global
-            if (contexts.contains(ClaimContexts.GLOBAL_DEFAULT_CONTEXT)) {
+            if (hasGlobalDefault && hasUserDefault) {
+                for (Context context : flagHolder.getAllContexts()) {
+                    if (context.getKey().equalsIgnoreCase("gd_claim_default")) {
+                        if (!context.getValue().equalsIgnoreCase("global") && !context.getValue().equalsIgnoreCase("user")) {
+                            return false;
+                        }
+                    }
+                }
+            }
+            if (hasGlobalDefault && !hasUserDefault) {
                 for (Context context : flagHolder.getAllContexts()) {
                     if (context.getKey().equalsIgnoreCase("gd_claim_default")) {
                         if (!context.getValue().equalsIgnoreCase("global")) {
@@ -66,8 +84,18 @@ public class UIFlagData {
                     }
                 }
             }
+
             // Context Override Types have higher priority than global
-            if (contexts.contains(ClaimContexts.GLOBAL_OVERRIDE_CONTEXT)) {
+            if (hasGlobalOverride && hasUserOverride) {
+                for (Context context : flagHolder.getAllContexts()) {
+                    if (context.getKey().equalsIgnoreCase("gd_claim_override")) {
+                        if (!context.getValue().equalsIgnoreCase("global") && !context.getValue().equalsIgnoreCase("user")) {
+                            return false;
+                        }
+                    }
+                }
+            }
+            if (hasGlobalOverride && !hasUserOverride) {
                 for (Context context : flagHolder.getAllContexts()) {
                     if (context.getKey().equalsIgnoreCase("gd_claim_override")) {
                         if (!context.getValue().equalsIgnoreCase("global")) {
@@ -79,6 +107,10 @@ public class UIFlagData {
         }
         this.flagContextMap.put(Objects.hash(filteredContexts), new FlagContextHolder(flag, value, type, contexts));
         return true;
+    }
+
+    public void setHolder(GDPermissionHolder holder) {
+        this.holder = holder;
     }
 
     public class FlagContextHolder {

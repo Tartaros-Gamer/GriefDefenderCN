@@ -88,27 +88,15 @@ public class GDFlag implements Flag {
                 case "block-place" :
                 case "collide-block" :
                 case "collide-entity" :
-                case "entity-damage" :
                 case "explosion-block" :
                 case "explosion-entity" :
-                case "fire-spread" :
                 case "interact-block-primary" :
                 case "interact-block-secondary" :
                 case "interact-entity-primary" :
                 case "interact-inventory" : 
                 case "liquid-flow" : 
                 case "projectile-impact-block" :
-                case "projectile-impact-entity" : 
                     return false;
-                default :
-                    return true;
-            }
-        }
-        if (type == ClaimTypes.WILDERNESS) {
-            switch (this.name) {
-                case "fire-spread" :
-                    return false;
-
                 default :
                     return true;
             }

@@ -54,7 +54,7 @@ import java.util.function.Consumer;
 public class CommandClaimSell extends BaseCommand {
 
     @CommandAlias("claimsell")
-    @Description("Puts your claim up for sale. Use /claimsell amount.\nNote: Requires economy plugin.")
+    @Description("%sell-claim")
     @Syntax("<amount> | cancel")
     @Subcommand("sell claim")
     public void execute(Player player, String arg) throws InvalidCommandArgument {
@@ -66,21 +66,17 @@ public class CommandClaimSell extends BaseCommand {
         final GDPlayerData playerData = GriefDefenderPlugin.getInstance().dataStore.getOrCreatePlayerData(player.getWorld(), player.getUniqueId());
         final GDClaim claim = GriefDefenderPlugin.getInstance().dataStore.getClaimAt(player.getLocation());
 
-        if (claim.isAdminClaim() || claim.isWilderness()) {
+        if (claim.isWilderness()) {
             GriefDefenderPlugin.sendMessage(player, MessageCache.getInstance().ECONOMY_CLAIM_NOT_FOR_SALE);
             return;
         }
 
-        if (!playerData.canIgnoreClaim(claim) && !player.getUniqueId().equals(claim.getOwnerUniqueId())) {
+        if ((claim.isAdminClaim() && !playerData.canManageAdminClaims) || !claim.isAdminClaim() && !playerData.canIgnoreClaim(claim) && !player.getUniqueId().equals(claim.getOwnerUniqueId())) {
             GriefDefenderPlugin.sendMessage(player, MessageCache.getInstance().PERMISSION_CLAIM_SALE);
             return;
         }
 
         Double salePrice = null;
-        if (!claim.getEconomyData().isForSale()) {
-            GriefDefenderPlugin.sendMessage(player, MessageCache.getInstance().ECONOMY_CLAIM_NOT_FOR_SALE);
-            return;
-        }
         if (arg.equalsIgnoreCase("cancel")) {
             claim.getEconomyData().setForSale(false);
             claim.getEconomyData().setSalePrice(-1);
@@ -109,9 +105,9 @@ public class CommandClaimSell extends BaseCommand {
 
         final Component saleConfirmationText = TextComponent.builder("")
                 .append("\n[")
-                .append("Confirm", TextColor.GREEN)
+                .append(MessageCache.getInstance().LABEL_CONFIRM.color(TextColor.GREEN))
                 .append("]\n")
-                .clickEvent(ClickEvent.runCommand(GDCallbackHolder.getInstance().createCallbackRunCommand(createSaleConfirmationConsumer(player, claim, salePrice))))
+                .clickEvent(ClickEvent.runCommand(GDCallbackHolder.getInstance().createCallbackRunCommand(player, createSaleConfirmationConsumer(player, claim, salePrice), true)))
                 .build();
         GriefDefenderPlugin.sendMessage(player, saleConfirmationText);
     }

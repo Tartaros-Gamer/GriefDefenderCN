@@ -46,14 +46,14 @@ import org.bukkit.entity.Player;
 public class CommandClaimMode extends BaseCommand {
 
     @CommandAlias("claim|claimmode")
-    @Description("Toggles claim mode creation. Note: This will default to basic claim mode.")
+    @Description("%mode-claim")
     @Subcommand("mode claim")
     public void execute(Player player) {
         final GDPlayerData playerData = GriefDefenderPlugin.getInstance().dataStore.getOrCreatePlayerData(player.getWorld(), player.getUniqueId());
         playerData.claimMode = !playerData.claimMode;
         playerData.claimSubdividing = null;
         if (!playerData.claimMode) {
-            playerData.revertActiveVisual(player);
+            playerData.revertAllVisuals();
             // check for any active WECUI visuals
             if (GriefDefenderPlugin.getInstance().getWorldEditProvider() != null) {
                 GriefDefenderPlugin.getInstance().getWorldEditProvider().revertVisuals(player, playerData, null);

@@ -66,7 +66,7 @@ import java.util.function.Consumer;
 public class CommandTrustList extends BaseCommand {
 
     @CommandAlias("trustlist")
-    @Description("Manages trust for the claim you're standing in.")
+    @Description("%trust-list")
     @Subcommand("trust list")
     public void execute(Player player) {
         final GDPlayerData playerData = GriefDefenderPlugin.getInstance().dataStore.getOrCreatePlayerData(player.getWorld(), player.getUniqueId());
@@ -172,6 +172,20 @@ public class CommandTrustList extends BaseCommand {
                         .build());
                 userIdList.remove(user.getUniqueId());
             }
+            for (String group : claim.getInternalClaimData().getManagerGroups()) {
+                trustList.add(TextComponent.builder("")
+                        .append(group, TextColor.GOLD)
+                        .append(" ")
+                        .append("[", TextColor.WHITE)
+                        .append(TextComponent.builder()
+                            .append("x", TextColor.RED)
+                            .hoverEvent(HoverEvent.showText(MessageCache.getInstance().UI_CLICK_REMOVE))
+                            .clickEvent(ClickEvent.runCommand(GDCallbackHolder.getInstance().createCallbackRunCommand(
+                                    createRemoveGroupConsumer(src, claim, playerData, type, returnCommand, claim.getInternalClaimData(), claim.getInternalClaimData().getManagerGroups(), group))))
+                            .build())
+                        .append("]", TextColor.WHITE)
+                        .build());
+            }
 
             for (UUID uuid : claim.getInternalClaimData().getBuilders()) {
                 if (!userIdList.contains(uuid)) {
@@ -192,6 +206,20 @@ public class CommandTrustList extends BaseCommand {
                         .append("]", TextColor.WHITE)
                         .build());
                 userIdList.remove(uuid);
+            }
+            for (String group : claim.getInternalClaimData().getBuilderGroups()) {
+                trustList.add(TextComponent.builder("")
+                        .append(group, TextColor.GOLD)
+                        .append(" ")
+                        .append("[", TextColor.WHITE)
+                        .append(TextComponent.builder()
+                            .append("x", TextColor.RED)
+                            .hoverEvent(HoverEvent.showText(MessageCache.getInstance().UI_CLICK_REMOVE))
+                            .clickEvent(ClickEvent.runCommand(GDCallbackHolder.getInstance().createCallbackRunCommand(
+                                    createRemoveGroupConsumer(src, claim, playerData, type, returnCommand, claim.getInternalClaimData(), claim.getInternalClaimData().getBuilderGroups(), group))))
+                            .build())
+                        .append("]", TextColor.WHITE)
+                        .build());
             }
     
             for (UUID uuid : claim.getInternalClaimData().getContainers()) {
@@ -214,6 +242,20 @@ public class CommandTrustList extends BaseCommand {
                         .build());
                 userIdList.remove(uuid);
             }
+            for (String group : claim.getInternalClaimData().getContainerGroups()) {
+                trustList.add(TextComponent.builder("")
+                        .append(group, TextColor.GOLD)
+                        .append(" ")
+                        .append("[", TextColor.WHITE)
+                        .append(TextComponent.builder()
+                            .append("x", TextColor.RED)
+                            .hoverEvent(HoverEvent.showText(MessageCache.getInstance().UI_CLICK_REMOVE))
+                            .clickEvent(ClickEvent.runCommand(GDCallbackHolder.getInstance().createCallbackRunCommand(
+                                    createRemoveGroupConsumer(src, claim, playerData, type, returnCommand, claim.getInternalClaimData(), claim.getInternalClaimData().getContainerGroups(), group))))
+                            .build())
+                        .append("]", TextColor.WHITE)
+                        .build());
+            }
 
             for (UUID uuid : claim.getInternalClaimData().getAccessors()) {
                 if (!userIdList.contains(uuid)) {
@@ -234,6 +276,20 @@ public class CommandTrustList extends BaseCommand {
                         .append("]", TextColor.WHITE)
                         .build());
                 userIdList.remove(uuid);
+            }
+            for (String group : claim.getInternalClaimData().getAccessorGroups()) {
+                trustList.add(TextComponent.builder("")
+                        .append(group, TextColor.GOLD)
+                        .append(" ")
+                        .append("[", TextColor.WHITE)
+                        .append(TextComponent.builder()
+                            .append("x", TextColor.RED)
+                            .hoverEvent(HoverEvent.showText(MessageCache.getInstance().UI_CLICK_REMOVE))
+                            .clickEvent(ClickEvent.runCommand(GDCallbackHolder.getInstance().createCallbackRunCommand(
+                                    createRemoveGroupConsumer(src, claim, playerData, type, returnCommand, claim.getInternalClaimData(), claim.getInternalClaimData().getAccessorGroups(), group))))
+                            .build())
+                        .append("]", TextColor.WHITE)
+                        .build());
             }
         } else {
             final List<UUID> trusts = claim.getUserTrustList(type);
@@ -268,6 +324,21 @@ public class CommandTrustList extends BaseCommand {
                         .build());
                 userIdList.remove(uuid);
             }
+            final List<String> groupList = claim.getGroupTrustList(type);
+            for (String group : groupList) {
+                trustList.add(TextComponent.builder("")
+                        .append(group, TextColor.GOLD)
+                        .append(" ")
+                        .append("[", TextColor.WHITE)
+                        .append(TextComponent.builder()
+                            .append("x", TextColor.RED)
+                            .hoverEvent(HoverEvent.showText(MessageCache.getInstance().UI_CLICK_REMOVE))
+                            .clickEvent(ClickEvent.runCommand(GDCallbackHolder.getInstance().createCallbackRunCommand(
+                                    createRemoveGroupConsumer(src, claim, playerData, type, returnCommand, claim.getInternalClaimData(), groupList, group))))
+                            .build())
+                        .append("]", TextColor.WHITE)
+                        .build());
+            }
         }
 
         Component footer = null;
@@ -289,6 +360,15 @@ public class CommandTrustList extends BaseCommand {
                         .append(ChatCaptureUtil.getInstance().createRecordChatComponent(src, claim, playerData, "trustlist", returnCommand))
                         .build();
             }
+        } else {
+            footer = TextComponent.empty();
+            if (messages != null && !messages.isEmpty()) {
+                for (Component message : messages) {
+                    footer = footer.append(message);
+                    fillSize -= 1;
+                }
+                messages.clear();
+            }
         }
 
         for (int i = 0; i < fillSize; i++) {
@@ -298,8 +378,6 @@ public class CommandTrustList extends BaseCommand {
         PaginationList.Builder paginationBuilder = PaginationList.builder()
                 .title(claimTrustHead).padding(TextComponent.of(" ").decoration(TextDecoration.STRIKETHROUGH, true)).contents(trustList).footer(footer);
         paginationBuilder.sendTo(src);
-        paginationBuilder.sendTo(src);
-
     }
 
     private static Consumer<CommandSource> createTrustConsumer(Player src, GDClaim claim, GDPlayerData playerData, TrustType type, Component returnCommand) {
@@ -312,7 +390,7 @@ public class CommandTrustList extends BaseCommand {
         return consumer -> {
             if (messages == null || messages.isEmpty()) {
                 playerData.commandInputTimestamp = Instant.now();
-                playerData.trustAddConsumer = createAddConsumer(src, claim, playerData, type, returnCommand);
+                playerData.commandConsumer = createAddConsumer(src, claim, playerData, type, returnCommand);
             }
             messages.add(TextComponent.builder()
                     .append(TextComponent.of("Do you want to add a ")
@@ -346,6 +424,7 @@ public class CommandTrustList extends BaseCommand {
         return consumer -> {
             String name = playerData.commandInput;
             List<Component> messages = new ArrayList<>();
+            boolean isGroup = false;
             if (playerData.commandInput.contains("player ")) {
                 name = name.replace("player ", "");
                 if (!name.equalsIgnoreCase("public") && PermissionUtil.getInstance().lookupUserUniqueId(name) == null) {
@@ -357,6 +436,7 @@ public class CommandTrustList extends BaseCommand {
                     return;
                 }
             } else if (playerData.commandInput.contains("group ")) {
+                isGroup = true;
                 name = name.replace("group ", "");
                 if (!name.equalsIgnoreCase("public") && !PermissionUtil.getInstance().hasGroupSubject(name)) {
                     messages.add(MessageStorage.MESSAGE_DATA.getMessage(MessageStorage.COMMAND_INVALID_PLAYER,
@@ -374,9 +454,13 @@ public class CommandTrustList extends BaseCommand {
                 createInputConsumer(src, claim, playerData, type, messages, returnCommand).accept(src);
                 return;
             }
-            CommandHelper.executeCommand(src, "trust", name + " " + type.getName().toLowerCase());
+            if (isGroup) {
+                CommandHelper.executeCommand(src, "trustgroup", name + " " + type.getName().toLowerCase());
+            } else {
+                CommandHelper.executeCommand(src, "trust", name + " " + type.getName().toLowerCase());
+            }
             playerData.commandInputTimestamp = null;
-            playerData.trustAddConsumer = null;
+            playerData.commandConsumer = null;
             showTrustList(src, claim, playerData, type, messages, returnCommand);
         };
     }
@@ -384,7 +468,7 @@ public class CommandTrustList extends BaseCommand {
     private static Consumer<CommandSource> createCancelConsumer(Player src, GDClaim claim, GDPlayerData playerData, TrustType type, Component returnCommand) {
         return consumer -> {
             playerData.commandInputTimestamp = null;
-            playerData.trustAddConsumer = null;
+            playerData.commandConsumer = null;
             showTrustList(src, claim, playerData, type, new ArrayList<>(), returnCommand);
         };
     }
@@ -392,6 +476,15 @@ public class CommandTrustList extends BaseCommand {
     private static Consumer<CommandSource> createRemoveConsumer(Player src, GDClaim claim, GDPlayerData playerData, TrustType type, Component returnCommand, IClaimData data, List<UUID> trustList, UUID uuid) {
         return consumer -> {
             trustList.remove(uuid);
+            data.setRequiresSave(true);
+            data.save();
+            showTrustList(src, claim, playerData, type, new ArrayList<>(), returnCommand);
+        };
+    }
+
+    private static Consumer<CommandSource> createRemoveGroupConsumer(Player src, GDClaim claim, GDPlayerData playerData, TrustType type, Component returnCommand, IClaimData data, List<String> trustList, String group) {
+        return consumer -> {
+            trustList.remove(group);
             data.setRequiresSave(true);
             data.save();
             showTrustList(src, claim, playerData, type, new ArrayList<>(), returnCommand);

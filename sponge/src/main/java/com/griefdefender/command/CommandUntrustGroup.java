@@ -64,7 +64,7 @@ public class CommandUntrustGroup extends BaseCommand {
 
     @CommandCompletion("@gdgroups @gdtrusttypes @gddummy")
     @CommandAlias("untrustgroup")
-    @Description("Revokes group access to your claim.")
+    @Description("%untrust-group")
     @Syntax("<group> [<accessor|builder|container|manager>]")
     @Subcommand("untrust group")
     public void execute(Player player, String target, @Optional String type) {
@@ -103,7 +103,7 @@ public class CommandUntrustGroup extends BaseCommand {
         if(claim.allowGrantPermission(player) != null) {
             final Component message = MessageStorage.MESSAGE_DATA.getMessage(MessageStorage.PERMISSION_TRUST,
                     ImmutableMap.of(
-                    "player", claim.getOwnerName()));
+                    "player", claim.getOwnerDisplayName()));
             GriefDefenderPlugin.sendMessage(player, message);
             return;
         }

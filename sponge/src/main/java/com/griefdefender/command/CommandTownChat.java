@@ -41,9 +41,13 @@ import org.spongepowered.api.entity.living.player.Player;
 public class CommandTownChat extends BaseCommand {
 
     @CommandAlias("townchat")
-    @Description("Toggles town chat.")
+    @Description("%town-chat")
     @Subcommand("town chat")
     public void execute(Player player) {
+        if (!GriefDefenderPlugin.getGlobalConfig().getConfig().town.townChatEnabled) {
+            return;
+        }
+
         final GDPlayerData playerData = GriefDefenderPlugin.getInstance().dataStore.getOrCreatePlayerData(player.getWorld(), player.getUniqueId());
         final GDClaim claim = GriefDefenderPlugin.getInstance().dataStore.getClaimAt(player.getLocation());
         if (!claim.isInTown()) {

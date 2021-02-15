@@ -64,17 +64,21 @@ public final class GDCauseStackManager {
 
     public GDCauseStackManager pushCause(Object obj) {
         checkNotNull(obj, "obj");
+        if (Sponge.getServer().getRunningTimeTicks() != tick_stored) {
+            this.cached_cause = null;
+            this.cause.clear();
+        }
         if (obj instanceof User) {
             obj = PermissionHolderCache.getInstance().getOrCreateUser((User) obj);
         }
-        if (tick_stored == Sponge.getServer().getRunningTimeTicks()) {
+        /*if (tick_stored == Sponge.getServer().getRunningTimeTicks()) {
             this.cause.push(obj);
             return this;
-        }
+        }*/
 
+        tick_stored = Sponge.getServer().getRunningTimeTicks();
         this.cached_cause = null;
         this.cause.push(obj);
-        tick_stored = Sponge.getServer().getRunningTimeTicks();
         return this;
     }
 

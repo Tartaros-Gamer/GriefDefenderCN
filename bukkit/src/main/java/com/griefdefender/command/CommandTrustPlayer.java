@@ -64,11 +64,7 @@ public class CommandTrustPlayer extends BaseCommand {
 
     @CommandCompletion("@gdplayers @gdtrusttypes @gddummy")
     @CommandAlias("trust")
-    @Description("Grants a player access to your claim."
-            + "\nAccessor: access to interact with all blocks except inventory."
-            + "\nContainer: access to interact with all blocks including inventory."
-            + "\nBuilder: access to everything above including ability to place and break blocks."
-            + "\nManager: access to everything above including ability to manage claim settings.")
+    @Description("%trust-player")
     @Syntax("<player> [<accessor|builder|container|manager>]")
     @Subcommand("trust player")
     public void execute(Player player, String target, @Optional String type) {
@@ -115,7 +111,7 @@ public class CommandTrustPlayer extends BaseCommand {
             return;
         }
 
-        if (user.getUniqueId().equals(player.getUniqueId()) && !playerData.canIgnoreClaim(claim)) {
+        if (user.getUniqueId().equals(player.getUniqueId()) && !playerData.canIgnoreClaim(claim) && claim.allowEdit(player) != null) {
             GriefDefenderPlugin.sendMessage(player, MessageCache.getInstance().TRUST_SELF);
             return;
         }
@@ -128,7 +124,7 @@ public class CommandTrustPlayer extends BaseCommand {
             if(claim.allowGrantPermission(player) != null) {
                 final Component message = MessageStorage.MESSAGE_DATA.getMessage(MessageStorage.PERMISSION_TRUST,
                         ImmutableMap.of(
-                        "player", claim.getOwnerName()));
+                        "player", claim.getOwnerDisplayName()));
                 GriefDefenderPlugin.sendMessage(player, message);
                 return;
             }

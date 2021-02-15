@@ -52,7 +52,6 @@ import java.nio.channels.Channels;
 import java.nio.channels.ReadableByteChannel;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.Paths;
 import java.security.MessageDigest;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -60,7 +59,7 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 
-@Plugin(id = "griefdefender", name = "GriefDefender", version = "1.2.4", description = "Designed to defend world from all types of grief.",
+@Plugin(id = "griefdefender", name = "GriefDefender", version = "1.3.0", description = "Designed to defend servers from all forms of grief.",
     authors = {"bloodmc"}, dependencies = {@Dependency(id = "luckperms")})
 public class GDBootstrap {
 
@@ -72,7 +71,6 @@ public class GDBootstrap {
     private Map<String, File> jarMap = new HashMap<>();
     private List<String> relocateList = new ArrayList<>();
     private static GDBootstrap instance;
-    private static final String LIB_ROOT_PATH = "./config/griefdefender/lib/";
     private static final String USER_AGENT = "Mozilla/5.0 (Windows NT 6.1; WOW64) AppleWebKit/535.7 (KHTML, like Gecko) Chrome/16.0.912.75 Safari/535.7";
 
     public static GDBootstrap getInstance() {
@@ -89,7 +87,7 @@ public class GDBootstrap {
         if (Sponge.getPlatform().getMinecraftVersion().getName().contains("1.12.2")) {
             bukkitJsonVersion = "1.12.2";
         } else {
-            this.getLogger().error("Detected unsupported version '" + version.getName() + "'. GriefDefender only 1.12.2. GriefDefender will NOT load.");
+            this.getLogger().error("Detected unsupported version '" + version.getName() + "'. GriefDefender only supports 1.12.2 on Sponge. GriefDefender will NOT load.");
             return;
         }
         try {
@@ -101,6 +99,7 @@ public class GDBootstrap {
                 this.getLogger().error("Resource " + bukkitJsonVersion + ".json is corrupted!. Please contact author for assistance.");
                 return;
             }
+            final Path LIB_ROOT_PATH = instance.configPath.resolve("lib");
             final Iterator<JSONObject> iterator = libraries.iterator();
             while (iterator.hasNext()) {
                 JSONObject lib = iterator.next();
@@ -109,8 +108,7 @@ public class GDBootstrap {
                 final String path = (String) lib.get("path");
                 final String relocate = (String) lib.get("relocate");
                 final String url = (String) lib.get("url");
-                final Path libPath = Paths.get(LIB_ROOT_PATH).resolve(path);
-                final File file = libPath.toFile();
+                final Path libPath = LIB_ROOT_PATH.resolve(path);
                 downloadLibrary(name, relocate, sha1, url, libPath);
             }
         } catch (Throwable t) {
@@ -175,7 +173,7 @@ public class GDBootstrap {
 
             
             final String hash = getLibraryHash(file);
-            
+
             if (hash == null || !sha1.equals(hash)) {
                 this.getLogger().error("Detected invalid hash '" + hash + "' for file '" + libPath + "'. Expected '" + sha1 + "'. Skipping...");
                 try {
@@ -195,7 +193,7 @@ public class GDBootstrap {
         try {
             final MessageDigest md = MessageDigest.getInstance("SHA-1");
             final byte[] data = Files.readAllBytes(file.toPath());
-            final byte[] b = md.digest(data); 
+            final byte[] b = md.digest(data);
             StringBuffer buffer = new StringBuffer();
             for (int i = 0; i < b.length; i++) {
                 if ((0xff & b[i]) < 0x10) {

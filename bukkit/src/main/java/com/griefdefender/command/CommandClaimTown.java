@@ -40,8 +40,8 @@ import org.bukkit.entity.Player;
 @CommandPermission(GDPermissions.COMMAND_TOWN_MODE)
 public class CommandClaimTown extends BaseCommand {
 
-    @CommandAlias("modetown")
-    @Description("Switches the shovel tool to town claims mode.")
+    @CommandAlias("modetown|townclaims")
+    @Description("%mode-town")
     @Subcommand("mode town")
     public void execute(Player player) {
 

@@ -82,7 +82,7 @@ public class FlagRegistryModule implements CatalogRegistryModule<Flag> {
     @Override
     public void registerCustomType(Flag type) {
         this.registryMap.put(type.getId().toLowerCase(Locale.ENGLISH), type);
-        GriefDefenderPlugin.getGlobalConfig().getConfig().permissionCategory.refreshFlags();
+        GriefDefenderPlugin.getFlagConfig().getConfig().defaultFlagCategory.refreshFlags();
         GriefDefenderPlugin.getInstance().dataStore.setDefaultGlobalPermissions();
     }
 

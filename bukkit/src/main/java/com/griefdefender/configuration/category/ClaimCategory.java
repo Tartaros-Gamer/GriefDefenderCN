@@ -33,13 +33,32 @@ import ninja.leaping.configurate.objectmapping.serialize.ConfigSerializable;
 @ConfigSerializable
 public class ClaimCategory extends ConfigCategory {
 
+    @Setting(value = "explosion-block-surface-blacklist", comment = "A list of source id's that cannot cause explosion damage to blocks above sea level."
+            + "\nEx. If you add 'minecraft:creeper' to the list, creepers would not be able to cause blocks to explode above sea level."
+            + "\nNote: This will have higher priority than 'explosion-block' flag.")
+    public List<String> explosionBlockSurfaceBlacklist = new ArrayList<>();
+    @Setting(value = "explosion-entity-surface-blacklist", comment = "A list of id's that cannot cause explosion damage to entities above sea level."
+            + "\nEx. If you add 'minecraft:creeper' to the list, creepers would not be able to hurt entities above sea level."
+            + "\nNote: This will have higher priority than 'explosion-entity' flag.")
+    public List<String> explosionEntitySurfaceBlacklist = new ArrayList<>();
+    @Setting(value = "explosion-surface-block-level", comment = "The 'Y' block level that is considered the surface for explosions. (Default: 63)")
+    public int explosionSurfaceBlockLevel = 63;
+    @Setting(value = "claim-block-task-move-threshold", comment = "The minimum threshold of movement (in blocks) required to receive accrued claim blocks. (Default: 0)"
+            + "\nNote: The claim block task runs every 5 minutes which is the time each player will get to move the required amount of blocks.")
+    public int claimBlockTaskMoveThreshold = 0;
+    @Setting(value = "claim-block-task", comment = "Whether claim block task should run to accrue blocks for players. (Default: True)"
+            + "\nNote: If in economy-mode, use setting 'use-claim-block-task' under economy category."
+            + "\nNote: To configure amount accrued, see 'blocks-accrued-per-hour' option at https://github.com/bloodmc/GriefDefender/wiki/Options-(Meta)#global-options")
+    public boolean claimBlockTask = true;
+    @Setting(value = "piston-protection-in-claims", comment = "Whether piston protection should be enabled within claims. Note: This does not affect pistons crossing into another claim, that is always protected. This only determines whether or not GD should process pistons if it doesn't cross into another claim.")
+    public boolean pistonProtectionInClaims = false;
     @Setting(value = "auto-chest-claim-block-radius", comment = "Radius used (in blocks) for auto-created claim when a chest is placed. Set to -1 to disable chest claim creation.")
     public int autoChestClaimBlockRadius = 4;
     @Setting(value = "border-block-radius", comment = "Set claim border of specified radius (in blocks), centered on claim. If set to 1, adds an additional 1 block protected radius around claim.\n" + 
             "Note: It is not recommended to set this value too high as performance can degrade due to deeper claim searches.")
     public int borderBlockRadius = 0;
-    @Setting(value = "claim-list-max", comment = "Controls the max displayed claims when using the '/claimlist' command. Default: 200")
-    public int claimListMax = 200;
+    @Setting(value = "restrict-world-max-height", comment = "Whether to restrict claiming to world max height. (Default: True")
+    public boolean restrictWorldMaxHeight = true;
     @Setting(value = "expiration-cleanup-interval", comment = "The interval in minutes for cleaning up expired claims. Default: 0. Set to 0 to disable.")
     public int expirationCleanupInterval = 0;
     @Setting(value = "auto-nature-restore", comment = "Whether survival claims will be automatically restored to world generated state when expired. \nNote: This only supports world generated blocks. Consider using 'auto-schematic-restore' if using a custom world.")
@@ -58,6 +77,8 @@ public class ClaimCategory extends ConfigCategory {
     @Setting(value = "claims-enabled",
             comment = "Whether claiming is enabled or not. (0 = Disabled, 1 = Enabled)")
     public int claimsEnabled = 1;
+    @Setting(value = "player-trapped-cooldown", comment = "The cooldown time, in seconds, when using the '/trapped' command. (Default: 300)")
+    public int trappedCooldown = 300;
     @Setting(value = "protect-tamed-entities", comment = "Whether tamed entities should be protected in claims. Default: true")
     public boolean protectTamedEntities = true;
     @Setting(value = "reserved-claim-names", comment = "A list of reserved claim names for use only by administrators."
@@ -66,12 +87,6 @@ public class ClaimCategory extends ConfigCategory {
         + "\nThe wildcard '*' represents zero or more characters."
         + "\nFor more information on usage, see https://commons.apache.org/proper/commons-io/javadocs/api-2.5/org/apache/commons/io/FilenameUtils.html#wildcardMatch(java.lang.String,%20java.lang.String)")
     public List<String> reservedClaimNames = new ArrayList<>();
-    @Setting(value = "bank-tax-system", comment = "Whether to enable the bank/tax system for claims. Set to true to enable.")
-    public boolean bankTaxSystem = false;
-    @Setting(value = "tax-apply-hour", comment = "The specific hour in day to apply tax to all claims.")
-    public int taxApplyHour = 12;
-    @Setting(value = "bank-transaction-log-limit")
-    public int bankTransactionLogLimit = 60;
 
     public ClaimCategory() {
 

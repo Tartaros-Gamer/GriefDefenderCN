@@ -51,7 +51,7 @@ public class CommandContainerTrust extends BaseCommand {
 
     @CommandCompletion("@gdplayers")
     @CommandAlias("ct|containertrust")
-    @Description("Grants a player access to interact with all blocks including inventory.")
+    @Description("%trust-container")
     @Syntax("<player>")
     public void execute(Player src, String target) {
 
@@ -95,7 +95,7 @@ public class CommandContainerTrust extends BaseCommand {
             if(claim.allowGrantPermission(src) != null) {
                 final Component message = MessageStorage.MESSAGE_DATA.getMessage(MessageStorage.PERMISSION_TRUST,
                         ImmutableMap.of(
-                        "player", claim.getOwnerName()));
+                        "player", claim.getOwnerDisplayName()));
                 GriefDefenderPlugin.sendMessage(src, message);
                 return;
             }
